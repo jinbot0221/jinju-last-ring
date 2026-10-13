@@ -35,6 +35,8 @@ fun FieldMapScreen(
     movePlayer: (Double, Double) -> Unit, resetPlayer: (Spot) -> Unit,
     openPuzzle: (Int) -> Unit, back: () -> Unit
 ) {
+    var arrivalEventShown by rememberSaveable(completed) { mutableStateOf(false) }
+    var showArrivalEvent by rememberSaveable(completed) { mutableStateOf(false) }
     var step by rememberSaveable { mutableDoubleStateOf(10.0) }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -56,6 +58,21 @@ fun FieldMapScreen(
     val arrived = canArrive(precise,distance,accuracy,age)
     val fresh = precise && accuracy != null && accuracy <= MAX_LOCATION_ACCURACY_METERS &&
         age != null && age in 0..MAX_LOCATION_AGE_NANOS
+    val nextSpot = spots.getOrNull(completed)
+    val nextDistance = nextSpot?.let { spot -> location?.let { fix ->
+        distanceMeters(fix.latitude,fix.longitude,spot.latitude,spot.longitude)
+    } }
+    val nextArrived = canArrive(precise,nextDistance,accuracy,age)
+    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
+    LaunchedEffect(completed,nextArrived,lifecycleState) {
+        if(lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) {
+            spotEventToShow(completed,spots.size,arrivalEventShown,nextArrived)?.let { index ->
+                selected=index
+                arrivalEventShown=true
+                showArrivalEvent=true
+            }
+        }
+    }
     val testDistance = if (testLatitude != null && testLongitude != null) location?.let {
         distanceMeters(it.latitude,it.longitude,testLatitude!!,testLongitude!!)
     } else null
@@ -100,6 +117,7 @@ fun FieldMapScreen(
         val panelHeight = (maxHeight * 0.45f).coerceAtMost(260.dp)
         Column(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text("현장 지도",style=MaterialTheme.typography.titleLarge)
+            Text(nextSpot?.let { "다음 이벤트: ${it.title} · 80m 안에 들어가면 자동 발생" } ?: "모든 기록을 수집했습니다.",style=MaterialTheme.typography.labelMedium)
             // Keep the map outside the scrolling panel so panning is not intercepted.
             AndroidView(factory={map},modifier=Modifier.fillMaxWidth().weight(1f),update={ view ->
                 view.overlays.clear()
@@ -188,8 +206,8 @@ fun FieldMapScreen(
                 }
                 if(!simulation) OutlinedButton(onClick=requestPermission) { Text("위치 권한 요청 / 갱신") }
                 if(developer) Text("개발 모드입니다. 실제 GPS 테스트는 설정에서 개발 모드를 끄세요. 버튼 이동은 실제 기기 위치를 변경하지 않습니다.")
-                Button(enabled=selected<completed || (selected==completed && (arrived || (developer && !simulation))),onClick={openPuzzle(selected)}) {
-                    Text(if(selected<completed) "수집한 기록 보기" else "퍼즐 열기")
+                Button(enabled=selected<completed || (selected==completed && (arrived || (developer && !simulation))),onClick={if(selected==completed && arrived) showArrivalEvent=true else openPuzzle(selected)}) {
+                    Text(if(selected<completed) "수집한 기록 보기" else if(arrived) "도착 이벤트 다시 보기" else "퍼즐 열기")
                 }
                 HorizontalDivider()
                 Text("지금 있는 곳에서 걷기 테스트",style=MaterialTheme.typography.titleMedium)
@@ -217,5 +235,21 @@ fun FieldMapScreen(
                 TextButton(onClick=back) { Text("돌아가기") }
             }
         }
+    }
+    if(showArrivalEvent && nextSpot!=null) {
+        AlertDialog(
+            onDismissRequest={showArrivalEvent=false},
+            title={Text("기록 발견 · ${nextSpot.title}")},
+            text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                Text(if(simulation) "버튼 이동으로 스팟에 도착했습니다." else "스팟에 도착했습니다.")
+                Text(nextSpot.story)
+                if(!nextArrived) Text("현재 도착 조건을 충족하지 않습니다. 지도로 돌아가 위치와 거리를 확인해주세요.")
+            }},
+            confirmButton={TextButton(enabled=nextArrived,onClick={
+                showArrivalEvent=false
+                openPuzzle(completed)
+            }) { Text("편지 해독하기") }},
+            dismissButton={TextButton(onClick={showArrivalEvent=false}) { Text("지도에 머무르기") }}
+        )
     }
 }
