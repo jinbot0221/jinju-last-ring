@@ -38,6 +38,15 @@ class MainActivity: ComponentActivity() {
             MaterialTheme(colorScheme=darkColorScheme(primary=Color(0xFFE5C780), background=Color(0xFF101C1B), surface=Color(0xFF1C2C29))) {
                 val vm: GameViewModel = viewModel()
                 val state by vm.state.collectAsStateWithLifecycle()
+                var simulationEnabled by rememberSaveable { mutableStateOf(true) }
+                var simulatedLatitude by rememberSaveable { mutableDoubleStateOf(spots[0].latitude + 0.0015) }
+                var simulatedLongitude by rememberSaveable { mutableDoubleStateOf(spots[0].longitude) }
+                val simulation = state.developer && simulationEnabled
+                val playerLocation = if (simulation) Location("button-simulation").apply {
+                    latitude=simulatedLatitude; longitude=simulatedLongitude
+                    accuracy=5f; elapsedRealtimeNanos=SystemClock.elapsedRealtimeNanos()
+                } else location
+                val playerPrecise = simulation || precise
                 val nav = rememberNavController()
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp)) {
@@ -73,8 +82,8 @@ class MainActivity: ComponentActivity() {
                                     spots.forEachIndexed { index, spot ->
                                         Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                                             Text("0${index+1}  ${spot.title}",style=MaterialTheme.typography.titleMedium)
-                                            val distance = location?.let { distanceMeters(it.latitude,it.longitude,spot.latitude,spot.longitude).toInt() }
-                                            Text(if(state.developer) "모의 도착 지원" else distance?.let { "약 ${it}m${if(!precise) " · 대략적 위치" else ""}" } ?: "거리 확인 대기 중")
+                                            val distance = playerLocation?.let { distanceMeters(it.latitude,it.longitude,spot.latitude,spot.longitude).toInt() }
+                                            Text(if(simulation) "모의 거리 ${distance ?: 0}m" else if(state.developer) "모의 도착 지원" else distance?.let { "약 ${it}m${if(!precise) " · 대략적 위치" else ""}" } ?: "거리 확인 대기 중")
                                             Text(if(index<state.completed) "기록 수집 완료" else if(index>state.completed) "이전 기록을 먼저 찾아주세요" else "다음 목적지")
                                             Button(enabled=index<=state.completed,onClick={nav.navigate("puzzle/$index")}) { Text(if(index<state.completed) "기록 읽기" else "스팟 열기") }
                                         } }
@@ -84,7 +93,14 @@ class MainActivity: ComponentActivity() {
                             }
                             composable("map") {
                                 FieldMapScreen(
-                                    location = location, precise = precise, locationMessage = locationMessage,
+                                    location = playerLocation, precise = playerPrecise, locationMessage = locationMessage,
+                                    simulation = simulation, simulationEnabled = simulationEnabled,
+                                    setSimulation = { simulationEnabled=it },
+                                    movePlayer = { bearing, meters ->
+                                        val moved=moveSimulatedPosition(SimulatedPosition(simulatedLatitude,simulatedLongitude),bearing,meters)
+                                        simulatedLatitude=moved.latitude; simulatedLongitude=moved.longitude
+                                    },
+                                    resetPlayer = { spot -> simulatedLatitude=spot.latitude+0.0015; simulatedLongitude=spot.longitude },
                                     completed = state.completed, developer = state.developer,
                                     requestPermission = { permissionRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION)) },
                                     openPuzzle = { nav.navigate("puzzle/$it") },
@@ -101,8 +117,8 @@ class MainActivity: ComponentActivity() {
                                 var simulated by rememberSaveable(index,state.developer) { mutableStateOf(false) }
                                 var now by remember { mutableLongStateOf(SystemClock.elapsedRealtimeNanos()) }
                                 LaunchedEffect(Unit) { while(true) { now=SystemClock.elapsedRealtimeNanos(); kotlinx.coroutines.delay(1000) } }
-                                val arrived=if(state.developer) simulated else precise && location?.let {
-                                    canArrive(precise, distanceMeters(it.latitude,it.longitude,spot.latitude,spot.longitude), if(it.hasAccuracy()) it.accuracy else null, now-it.elapsedRealtimeNanos)
+                                val arrived=if(state.developer && !simulation) simulated else playerPrecise && playerLocation?.let {
+                                    canArrive(playerPrecise, distanceMeters(it.latitude,it.longitude,spot.latitude,spot.longitude), if(it.hasAccuracy()) it.accuracy else null, if(simulation) 0L else now-it.elapsedRealtimeNanos)
                                 }==true
                                 Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(14.dp)) {
                                     Text(spot.title,style=MaterialTheme.typography.headlineSmall)
@@ -110,7 +126,11 @@ class MainActivity: ComponentActivity() {
                                     if(index<state.completed) { Text("수집 완료 · ${spot.relic}") }
                                     else {
                                         Text(if(arrived) "도착 확인 완료" else "도착 확인 후 퍼즐을 풀 수 있습니다.")
-                                        if(state.developer) Button(onClick={simulated=true}) { Text("개발 모드: 이곳에 도착") }
+                                        if(simulation) {
+                                            Text("버튼 이동 모드 · 지도에서 80m 안으로 이동해야 해독할 수 있습니다.")
+                                            OutlinedButton(onClick={nav.navigate("map")}) { Text("지도에서 버튼으로 이동") }
+                                        }
+                                        else if(state.developer) Button(onClick={simulated=true}) { Text("개발 모드: 이곳에 도착") }
                                         else { Text(locationMessage)
                                             if(!precise) Text("대략적 위치만으로는 도착을 확인할 수 없습니다. 정확한 위치를 허용해주세요.")
                                             Text("정확한 위치, 50m 이하의 오차, 1분 이내의 위치 정보가 필요합니다. GPS를 켜고 안전한 야외 동선에서 기다려주세요.")
@@ -142,7 +162,7 @@ class MainActivity: ComponentActivity() {
                                 Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                                     Text("플레이 설정",style=MaterialTheme.typography.headlineSmall)
                                     Row { Text("개발 모드",Modifier.weight(1f)); Switch(checked=state.developer,onCheckedChange=vm::developer) }
-                                    Text("개발 모드에서는 위치 권한 없이 모든 스팟에 모의 도착할 수 있습니다. 기본값은 개발 모드입니다. 현장 모드로 전환하면 실제 위치를 확인합니다.")
+                                    Text("개발 모드는 기본으로 켜져 있습니다. 지도에서 방향 버튼으로 이동해 80m 안에 도착하면 퍼즐을 풀 수 있습니다. 지도에서 버튼 이동을 끄면 기존 모의 도착 버튼도 사용할 수 있습니다. 현장 모드로 전환하면 실제 위치를 확인합니다.")
                                     Text("로그인·게임 서버·결제·지도 API 키가 없습니다. 지도 타일은 인터넷으로 OpenStreetMap에서 불러옵니다. 진행 상황과 설정은 이 기기에 자동 저장됩니다. 앱을 삭제하면 기록도 삭제됩니다.")
                                     Text("좌표는 초기 시제품용 근사값입니다. 현장 답사로 보정해야 합니다. 퍼즐은 창작이며 실제 시설물에 답을 부착할 필요가 없습니다.")
                                     OutlinedButton(onClick={confirm=true}) { Text("진행 상황 초기화") }

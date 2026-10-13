@@ -31,23 +31,26 @@ import java.io.File
 fun FieldMapScreen(
     location: Location?, precise: Boolean, locationMessage: String,
     completed: Int, developer: Boolean, requestPermission: () -> Unit,
+    simulation: Boolean, simulationEnabled: Boolean, setSimulation: (Boolean) -> Unit,
+    movePlayer: (Double, Double) -> Unit, resetPlayer: (Spot) -> Unit,
     openPuzzle: (Int) -> Unit, back: () -> Unit
 ) {
+    var step by rememberSaveable { mutableDoubleStateOf(10.0) }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var selected by rememberSaveable { mutableIntStateOf(completed.coerceAtMost(spots.lastIndex)) }
     var follow by rememberSaveable { mutableStateOf(true) }
-    var testLatitude by rememberSaveable { mutableStateOf<Double?>(null) }
-    var testLongitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    var testLatitude by rememberSaveable(simulation) { mutableStateOf<Double?>(null) }
+    var testLongitude by rememberSaveable(simulation) { mutableStateOf<Double?>(null) }
     var testError by remember { mutableStateOf("") }
-    var wasOutside by rememberSaveable { mutableStateOf(false) }
-    var returned by rememberSaveable { mutableStateOf(false) }
+    var wasOutside by rememberSaveable(simulation) { mutableStateOf(false) }
+    var returned by rememberSaveable(simulation) { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtimeNanos()) }
     LaunchedEffect(lifecycleOwner) {
         while (true) { now = SystemClock.elapsedRealtimeNanos(); delay(1000) }
     }
     val target = spots[selected]
-    val age = location?.let { now - it.elapsedRealtimeNanos }
+    val age = location?.let { if(simulation) 0L else now - it.elapsedRealtimeNanos }
     val accuracy = location?.takeIf { it.hasAccuracy() }?.accuracy
     val distance = location?.let { distanceMeters(it.latitude,it.longitude,target.latitude,target.longitude) }
     val arrived = canArrive(precise,distance,accuracy,age)
@@ -127,7 +130,7 @@ fun FieldMapScreen(
                     })
                     view.overlays.add(Marker(view).apply {
                         this.position=position
-                        title=if(precise) "내 위치" else "내 위치 · 대략적"
+                        title=if(simulation) "모의 플레이어 · 버튼 이동" else if(precise) "내 위치" else "내 위치 · 대략적"
                         snippet="파란 원은 위치 오차입니다."
                         setAnchor(Marker.ANCHOR_CENTER,Marker.ANCHOR_BOTTOM)
                         icon=context.getDrawable(android.R.drawable.ic_menu_mylocation)
@@ -150,6 +153,22 @@ fun FieldMapScreen(
                 Text("© OpenStreetMap contributors",style=MaterialTheme.typography.labelSmall)
             }
             Column(Modifier.fillMaxWidth().heightIn(max=panelHeight).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                if(developer) {
+                    Row { Text("지도에서 버튼으로 이동",Modifier.weight(1f)); Switch(checked=simulationEnabled,onCheckedChange=setSimulation) }
+                }
+                if(simulation) {
+                    Text("모의 위치 · GPS/위치 권한 불필요 · 한 번에 ${step.toInt()}m 이동")
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected=step==10.0,onClick={step=10.0},label={Text("10m")})
+                        FilterChip(selected=step==25.0,onClick={step=25.0},label={Text("25m")})
+                        TextButton(onClick={resetPlayer(target);follow=true}) { Text("선택 스팟 출발점") }
+                    }
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+                        listOf("북 ↑" to 0.0,"남 ↓" to 180.0,"서 ←" to 270.0,"동 →" to 90.0).forEach { (label,bearing) ->
+                            OutlinedButton(modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=4.dp),onClick={movePlayer(bearing,step);follow=true}) { Text(label) }
+                        }
+                    }
+                }
                 Text("${selected+1}. ${target.title}",style=MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick={selected=(selected+spots.size-1)%spots.size;follow=false;val s=spots[selected];map.controller.setCenter(GeoPoint(s.latitude,s.longitude))}) { Text("이전 스팟") }
@@ -167,9 +186,9 @@ fun FieldMapScreen(
                     TextButton(onClick={follow=true}) { Text(if(follow) "내 위치 추적 중" else "내 위치 따라가기") }
                     TextButton(onClick={follow=false;map.controller.setCenter(GeoPoint(target.latitude,target.longitude))}) { Text("선택 스팟 보기") }
                 }
-                OutlinedButton(onClick=requestPermission) { Text("위치 권한 요청 / 갱신") }
-                if(developer) Text("개발 모드입니다. 실제 걷기로 게임을 진행하려면 설정에서 개발 모드를 끄세요.")
-                Button(enabled=selected<completed || (selected==completed && (arrived || developer)),onClick={openPuzzle(selected)}) {
+                if(!simulation) OutlinedButton(onClick=requestPermission) { Text("위치 권한 요청 / 갱신") }
+                if(developer) Text("개발 모드입니다. 실제 GPS 테스트는 설정에서 개발 모드를 끄세요. 버튼 이동은 실제 기기 위치를 변경하지 않습니다.")
+                Button(enabled=selected<completed || (selected==completed && (arrived || (developer && !simulation))),onClick={openPuzzle(selected)}) {
                     Text(if(selected<completed) "수집한 기록 보기" else "퍼즐 열기")
                 }
                 HorizontalDivider()
@@ -178,7 +197,7 @@ fun FieldMapScreen(
                 OutlinedButton(enabled=fresh,onClick={
                     // Recheck when tapped: a previously rendered enabled button can become stale.
                     val fix=location
-                    val tapAge=fix?.let { SystemClock.elapsedRealtimeNanos()-it.elapsedRealtimeNanos }
+                    val tapAge=fix?.let { if(simulation) 0L else SystemClock.elapsedRealtimeNanos()-it.elapsedRealtimeNanos }
                     if(fix!=null && canArrive(precise,0.0,if(fix.hasAccuracy()) fix.accuracy else null,tapAge)) {
                         testLatitude=fix.latitude;testLongitude=fix.longitude;wasOutside=false;returned=false;testError=""
                     } else testError="정확하고 최신인 위치를 받은 뒤 다시 시도해주세요."
