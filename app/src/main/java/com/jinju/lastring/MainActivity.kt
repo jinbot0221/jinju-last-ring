@@ -54,6 +54,7 @@ class MainActivity: ComponentActivity() {
                                     Text("진행 ${state.completed} / ${spots.size}")
                                     LinearProgressIndicator(progress={ state.completed.toFloat()/spots.size },modifier=Modifier.fillMaxWidth())
                                     Button(onClick={nav.navigate(if(state.completed==spots.size) "ending" else "spots")}) { Text(if(state.completed==spots.size) "결말 다시 보기" else "여정 시작 / 이어하기") }
+                                    OutlinedButton(onClick={nav.navigate("map")}) { Text("현장 지도 / 걷기 테스트") }
                                     OutlinedButton(onClick={nav.navigate("settings")}) { Text("설정 및 플레이 안내") }
                                     Text("수집한 기록",style=MaterialTheme.typography.titleLarge)
                                     spots.take(state.completed).forEach { Text("✦ ${it.relic}") }
@@ -68,6 +69,7 @@ class MainActivity: ComponentActivity() {
                                         if(!precise) Text("대략적 위치로 거리는 확인할 수 있지만, 도착 판정에는 정확한 위치가 필요합니다.")
                                         OutlinedButton(onClick={permissionRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION))}) { Text("위치 권한 요청 / 갱신") }
                                     }
+                                    OutlinedButton(onClick={nav.navigate("map")}) { Text("지도에서 위치와 도착 확인") }
                                     spots.forEachIndexed { index, spot ->
                                         Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                                             Text("0${index+1}  ${spot.title}",style=MaterialTheme.typography.titleMedium)
@@ -80,6 +82,15 @@ class MainActivity: ComponentActivity() {
                                     TextButton(onClick={nav.popBackStack()}) { Text("홈으로") }
                                 }
                             }
+                            composable("map") {
+                                FieldMapScreen(
+                                    location = location, precise = precise, locationMessage = locationMessage,
+                                    completed = state.completed, developer = state.developer,
+                                    requestPermission = { permissionRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION)) },
+                                    openPuzzle = { nav.navigate("puzzle/$it") },
+                                    back = { nav.popBackStack() }
+                                )
+                            }
                             composable("puzzle/{index}") { entry ->
                                 val index=entry.arguments?.getString("index")?.toIntOrNull()
                                 if(index==null || index !in spots.indices || index>state.completed) { Text("아직 열리지 않은 기록입니다."); return@composable }
@@ -91,7 +102,7 @@ class MainActivity: ComponentActivity() {
                                 var now by remember { mutableLongStateOf(SystemClock.elapsedRealtimeNanos()) }
                                 LaunchedEffect(Unit) { while(true) { now=SystemClock.elapsedRealtimeNanos(); kotlinx.coroutines.delay(1000) } }
                                 val arrived=if(state.developer) simulated else precise && location?.let {
-                                    now-it.elapsedRealtimeNanos in 0..60_000_000_000L && it.hasAccuracy() && it.accuracy<=50 && distanceMeters(it.latitude,it.longitude,spot.latitude,spot.longitude)<=80
+                                    canArrive(precise, distanceMeters(it.latitude,it.longitude,spot.latitude,spot.longitude), if(it.hasAccuracy()) it.accuracy else null, now-it.elapsedRealtimeNanos)
                                 }==true
                                 Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(14.dp)) {
                                     Text(spot.title,style=MaterialTheme.typography.headlineSmall)
@@ -132,7 +143,7 @@ class MainActivity: ComponentActivity() {
                                     Text("플레이 설정",style=MaterialTheme.typography.headlineSmall)
                                     Row { Text("개발 모드",Modifier.weight(1f)); Switch(checked=state.developer,onCheckedChange=vm::developer) }
                                     Text("개발 모드에서는 위치 권한 없이 모든 스팟에 모의 도착할 수 있습니다. 기본값은 개발 모드입니다. 현장 모드로 전환하면 실제 위치를 확인합니다.")
-                                    Text("로그인·서버·결제·지도 API 키가 없습니다. 진행 상황과 설정은 이 기기에 자동 저장됩니다. 앱을 삭제하면 기록도 삭제됩니다.")
+                                    Text("로그인·게임 서버·결제·지도 API 키가 없습니다. 지도 타일은 인터넷으로 OpenStreetMap에서 불러옵니다. 진행 상황과 설정은 이 기기에 자동 저장됩니다. 앱을 삭제하면 기록도 삭제됩니다.")
                                     Text("좌표는 초기 시제품용 근사값입니다. 현장 답사로 보정해야 합니다. 퍼즐은 창작이며 실제 시설물에 답을 부착할 필요가 없습니다.")
                                     OutlinedButton(onClick={confirm=true}) { Text("진행 상황 초기화") }
                                     TextButton(onClick={nav.popBackStack()}) { Text("돌아가기") }

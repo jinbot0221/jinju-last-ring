@@ -31,5 +31,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.0")
     implementation("androidx.datastore:datastore-preferences:1.1.4")
     implementation("com.google.android.gms:play-services-location:21.3.0")
+    // Play Services pulls an older Fragment; Activity Result requires 1.3+.
+    implementation("androidx.fragment:fragment:1.8.6")
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
     testImplementation("junit:junit:4.13.2")
 }
