@@ -15,8 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -37,7 +35,7 @@ class MainActivity: ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MaterialTheme(colorScheme=darkColorScheme(primary=Color(0xFFE5C780), background=Color(0xFF101C1B), surface=Color(0xFF1C2C29))) {
+            GameTheme {
                 val vm: GameViewModel = viewModel()
                 val state by vm.state.collectAsStateWithLifecycle()
                 var simulationEnabled by rememberSaveable { mutableStateOf(true) }
@@ -55,20 +53,9 @@ class MainActivity: ComponentActivity() {
                         if (!state.loaded) { CircularProgressIndicator(); return@Box }
                         NavHost(navController=nav,startDestination="home",modifier=Modifier.fillMaxSize()) {
                             composable("home") {
-                                Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-                                    Text("진주성: 마지막 가락지",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
-                                    Text("그녀가 부탁한 것은 가락지였다. 그 이유는 마지막에야 알게 되었다.",style=MaterialTheme.typography.headlineMedium)
-                                    Text("현재의 진주성을 걸으며 과거의 논개를 도와 옥가락지를 찾아 전달하세요.")
-                                    Text(STORY_NOTICE,style=MaterialTheme.typography.bodySmall)
-                                    Text("진행 ${state.completed} / ${spots.size}")
-                                    LinearProgressIndicator(progress={ state.completed.toFloat()/spots.size },modifier=Modifier.fillMaxWidth())
-                                    Button(onClick={nav.navigate(if(state.completed==spots.size) "ending" else "prologue")}) { Text(if(state.completed==spots.size) "결말 다시 보기" else "여정 시작 / 이어하기") }
-                                    OutlinedButton(onClick={nav.navigate("map")}) { Text("현장 지도 / 걷기 테스트") }
-                                    OutlinedButton(onClick={nav.navigate("settings")}) { Text("설정 및 플레이 안내") }
-                                    Text("수집한 기록",style=MaterialTheme.typography.titleLarge)
-                                    spots.take(state.completed).forEach { Text("✦ ${it.relic}") }
-                                    Text("현장에서는 통행과 관람 규칙을 지켜주세요. 의암과 강변의 위험 구역에는 접근하지 마세요. 안전한 관람 동선에서 플레이하세요.")
-                                }
+                                HomeScreen(state,
+                                    start={nav.navigate(if(state.completed==spots.size) "ending" else "prologue")},
+                                    map={nav.navigate("map")},settings={nav.navigate("settings")})
                             }
                             composable("prologue") {
                                 Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(20.dp)) {
@@ -136,7 +123,6 @@ class MainActivity: ComponentActivity() {
                                 val index=entry.arguments?.getString("index")?.toIntOrNull()
                                 if(index==null || index !in spots.indices || index>state.completed) { Text("아직 열리지 않은 기록입니다."); return@composable }
                                 val spot=spots[index]
-                                var answer by rememberSaveable(index) { mutableStateOf("") }
                                 var submitted by rememberSaveable(index) { mutableStateOf(false) }
                                 var feedback by rememberSaveable(index) { mutableStateOf("") }
                                 var hint by rememberSaveable(index) { mutableStateOf(false) }
@@ -177,9 +163,11 @@ class MainActivity: ComponentActivity() {
                                             Text("정확한 위치, 50m 이하의 오차, 1분 이내의 위치 정보가 필요합니다. GPS를 켜고 안전한 야외 동선에서 기다려주세요.")
                                             OutlinedButton(onClick={permissionRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION))}) { Text("위치 권한 요청 / 갱신") }
                                         }
-                                        Text(spot.question)
-                                        OutlinedTextField(value=answer,onValueChange={answer=it;feedback=""},label={Text("정답")},enabled=arrived, singleLine=true,modifier=Modifier.fillMaxWidth())
-                                        Button(enabled=arrived && !submitted,onClick={ if(answerMatches(answer,spot.answer)) { submitted=true; vm.complete(index); feedback="정답입니다! 기록을 저장하고 있습니다." } else feedback="다시 생각해보세요. 힌트를 확인할 수 있습니다." }) { Text("기록 해독") }
+                                        InteractiveMission(index,enabled=arrived && !submitted,developer=state.developer,onCheck={ value ->
+                                            if(arrived && !submitted && answerMatches(value,spot.answer)) {
+                                                submitted=true; vm.complete(index); feedback="임무 성공! 진행을 저장하고 있습니다."
+                                            } else feedback="다시 살펴보세요. 역사 단서와 힌트를 확인할 수 있습니다."
+                                        })
                                         TextButton(onClick={hint=true}) { Text("힌트 보기") }
                                         if(hint) Text(spot.hint)
                                         Text(feedback)

@@ -33,6 +33,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.3.0")
     // Play Services pulls an older Fragment; Activity Result requires 1.3+.
     implementation("androidx.fragment:fragment:1.8.6")
+    implementation("com.google.mlkit:text-recognition-korean:16.0.1")
     implementation("org.osmdroid:osmdroid-android:6.1.20")
     testImplementation("junit:junit:4.13.2")
 }
