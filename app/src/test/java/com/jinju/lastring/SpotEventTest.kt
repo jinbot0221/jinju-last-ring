@@ -23,7 +23,7 @@ class SpotEventTest {
         assertEquals(3,spotEventToShow(3,4,2,true))
         assertNull(spotEventToShow(1,4,1,true))
     }
-    @Test fun allFourActualSpotsTriggerAfterPreviousChapterWasShown() {
+    @Test fun allActualSpotsTriggerAfterPreviousChapterWasShown() {
         var lastShown=-1
         spots.forEachIndexed { index, spot ->
             val center=SimulatedPosition(spot.latitude,spot.longitude)
@@ -35,6 +35,32 @@ class SpotEventTest {
             lastShown=index
             assertNull(spotEventToShow(index,spots.size,lastShown,isInside()))
         }
+    }
+    @Test fun unfinishedEventFiresAgainAfterLeavingAndReturning() {
+        var lastShown=-1
+        repeat(3) {
+            assertEquals(0,spotEventToShow(0,spots.size,lastShown,true))
+            lastShown=0 // dismissing the event leaves progress unfinished
+            assertNull(spotEventToShow(0,spots.size,lastShown,true))
+            assertTrue(canRearmSpotEvent(true,81.0,5f,0L))
+            if(canRearmSpotEvent(true,81.0,5f,0L)) lastShown=-1
+            assertNull(spotEventToShow(0,spots.size,lastShown,false))
+        }
+    }
+    @Test fun missingOrBadGpsDoesNotCountAsLeaving() {
+        assertFalse(canRearmSpotEvent(false,120.0,5f,0L))
+        assertFalse(canRearmSpotEvent(true,120.0,51f,0L))
+        assertFalse(canRearmSpotEvent(true,120.0,5f,MAX_LOCATION_AGE_NANOS+1))
+        assertFalse(canRearmSpotEvent(true,null,null,null))
+        assertFalse(canRearmSpotEvent(true,80.0,5f,0L))
+        assertFalse(canRearmSpotEvent(true,Double.NaN,5f,0L))
+    }
+    @Test fun completedSpotCannotReopenWhenRevisited() {
+        val old=spots[0]; val next=spots[1]
+        val arrivedAtNext=canArrive(true,distanceMeters(old.latitude,old.longitude,next.latitude,next.longitude),5f,0L)
+        assertFalse(arrivedAtNext)
+        assertNull(spotEventToShow(1,spots.size,-1,arrivedAtNext))
+        assertEquals(1,spotEventToShow(1,spots.size,-1,true))
     }
     @Test fun approximateStaleAndDistantFixesNeverTriggerEvents() {
         for(arrived in listOf(canArrive(false,0.0,5f,0L),canArrive(true,0.0,5f,MAX_LOCATION_AGE_NANOS+1),canArrive(true,81.0,5f,0L))) {

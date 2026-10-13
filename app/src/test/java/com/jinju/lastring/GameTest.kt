@@ -15,7 +15,8 @@ class GameTest {
         assertFalse(answerMatches("","약속"))
     }
     @Test fun everyChapterCanBeSolvedAndHasAReward() {
-        assertEquals(4,spots.size)
+        assertEquals(5,spots.size)
+        assertEquals(spots.size,chapterStories.size)
         spots.forEach { assertTrue(answerMatches(it.answer,it.answer)); assertTrue(it.hint.isNotBlank()); assertTrue(it.relic.isNotBlank()) }
     }
 }

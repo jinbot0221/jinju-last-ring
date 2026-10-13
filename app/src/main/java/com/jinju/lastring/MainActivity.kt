@@ -57,8 +57,9 @@ class MainActivity: ComponentActivity() {
                             composable("home") {
                                 Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                                     Text("진주성: 마지막 가락지",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
-                                    Text("강물은 기억하고, 가락지는 약속한다.",style=MaterialTheme.typography.headlineMedium)
-                                    Text("진주성의 네 장소를 따라 잊힌 편지를 완성하세요. 역사에서 영감을 받은 창작 이야기입니다.")
+                                    Text("그녀가 부탁한 것은 가락지였다. 그 이유는 마지막에야 알게 되었다.",style=MaterialTheme.typography.headlineMedium)
+                                    Text("현재의 진주성을 걸으며 과거의 논개를 도와 옥가락지를 찾아 전달하세요.")
+                                    Text(STORY_NOTICE,style=MaterialTheme.typography.bodySmall)
                                     Text("진행 ${state.completed} / ${spots.size}")
                                     LinearProgressIndicator(progress={ state.completed.toFloat()/spots.size },modifier=Modifier.fillMaxWidth())
                                     Button(onClick={nav.navigate(if(state.completed==spots.size) "ending" else "prologue")}) { Text(if(state.completed==spots.size) "결말 다시 보기" else "여정 시작 / 이어하기") }
@@ -71,10 +72,10 @@ class MainActivity: ComponentActivity() {
                             }
                             composable("prologue") {
                                 Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(20.dp)) {
-                                    Text(if(state.completed==0) "프롤로그 · 잊힌 편지" else "다시 이어지는 여정",style=MaterialTheme.typography.headlineMedium)
-                                    Text("진주성에 해가 저물 무렵, 당신은 오래된 가락지와 봉인된 편지 한 장을 발견합니다.")
-                                    Text("‘이 성에 남겨진 네 개의 기억을 찾아주세요. 마지막 기억이 깨어날 때, 가락지가 지키던 약속을 알게 될 것입니다.’")
-                                    Text("편지에는 성문, 우물, 누각, 강가의 흔적이 남아 있습니다. 각 장소에 도착해 숨겨진 문장을 해독하면 다음 기록이 열립니다.")
+                                    Text(if(state.completed==0) "프롤로그 · 논개의 부탁" else "다시 이어지는 여정",style=MaterialTheme.typography.headlineMedium)
+                                    Text("당신은 현재의 진주성을 방문한 사람입니다. 휴대폰에 낯선 지도 한 장이 나타납니다. 입구에서 첫 장소에 도착하면 1593년의 풍경과 논개의 목소리가 화면 속에서 열립니다.")
+                                    Text("화면에 짧은 문장이 떠오릅니다. ‘누군가 당신에게 부탁을 전하려 합니다.’ 아직 그 부탁이 무엇인지, 왜 당신을 기다리는지 알지 못합니다.")
+                                    Text("지도에 표시된 첫 장소로 향하세요. 성 안의 단서를 따라 길을 찾고 화면 속 경비를 통과하는 여정이 시작됩니다. 실제로 몰래 들어가거나 관람 동선을 벗어날 필요는 없습니다.")
                                     if(state.completed>0) {
                                         Text("지금까지 찾은 기록 ${state.completed}개",style=MaterialTheme.typography.titleMedium)
                                         spots.take(state.completed).forEach { Text("✦ ${it.relic}") }
@@ -183,7 +184,7 @@ class MainActivity: ComponentActivity() {
                                         if(hint) Text(spot.hint)
                                         Text(feedback)
                                     }
-                                    if(state.completed==spots.size) Button(onClick={nav.navigate("ending")}) { Text("마지막 편지 읽기") }
+                                    if(state.completed==spots.size) Button(onClick={nav.navigate("ending")}) { Text("마지막 이야기 보기") }
                                     TextButton(onClick={
                                         if(!nav.popBackStack("map",false)) nav.navigate("map") { popUpTo("home"); launchSingleTop=true }
                                     }) { Text("지도로 돌아가기") }
@@ -208,10 +209,11 @@ class MainActivity: ComponentActivity() {
                             composable("ending") {
                                 Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(20.dp)) {
                                     if(state.completed==spots.size) {
-                                        Text("약속은 남는다",style=MaterialTheme.typography.headlineLarge)
-                                        Text("네 조각의 기록이 하나의 가락지가 되었습니다. 잊힌 목소리를 기억하겠다는 당신의 약속으로, 진주성의 마지막 편지가 완성됩니다.")
-                                        Text("✦ 마지막 가락지 획득 · 모든 기록 수집 완료")
-                                    } else Text("네 기록을 모두 찾아야 마지막 편지를 읽을 수 있습니다.")
+                                        Text("남강에 남은 부탁",style=MaterialTheme.typography.headlineLarge)
+                                        Text("전승은 논개가 왜장을 끌어안고 남강으로 몸을 던졌다고 전합니다. 붙잡은 손을 놓지 않기 위한 가락지. 그녀가 부탁한 이유를 이제야 알게 됩니다. 화면에는 고요한 남강이 남고, 당신은 현재의 안전한 관람 지점에서 여정을 마칩니다. 이 장면에는 조작이나 행동 선택이 없습니다.")
+                                        Text("✦ 옥가락지 전달 완료 · 여정 완료")
+                                        Text(STORY_NOTICE,style=MaterialTheme.typography.bodySmall)
+                                    } else Text("다섯 장소의 임무를 모두 마쳐야 마지막 이야기를 볼 수 있습니다.")
                                     Button(onClick={nav.navigate("home") { popUpTo("home") { inclusive=true } }}) { Text("홈으로") }
                                 }
                             }
@@ -222,6 +224,7 @@ class MainActivity: ComponentActivity() {
                                     Row { Text("개발 모드",Modifier.weight(1f)); Switch(checked=state.developer,onCheckedChange=vm::developer) }
                                     Text("개발 모드는 기본으로 켜져 있습니다. 지도에서 방향 버튼으로 이동해 80m 안에 도착하면 퍼즐을 풀 수 있습니다. 지도에서 버튼 이동을 끄면 기존 모의 도착 버튼도 사용할 수 있습니다. 현장 모드로 전환하면 실제 위치를 확인합니다.")
                                     Text("로그인·게임 서버·결제·지도 API 키가 없습니다. 지도 타일은 인터넷으로 OpenStreetMap에서 불러옵니다. 진행 상황과 설정은 이 기기에 자동 저장됩니다. 앱을 삭제하면 기록도 삭제됩니다.")
+                                    Text(STORY_NOTICE,style=MaterialTheme.typography.bodySmall)
                                     Text("좌표는 초기 시제품용 근사값입니다. 현장 답사로 보정해야 합니다. 퍼즐은 창작이며 실제 시설물에 답을 부착할 필요가 없습니다.")
                                     OutlinedButton(onClick={confirm=true}) { Text("진행 상황 초기화") }
                                     TextButton(onClick={nav.popBackStack()}) { Text("돌아가기") }

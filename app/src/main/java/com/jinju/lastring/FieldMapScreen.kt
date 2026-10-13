@@ -38,8 +38,8 @@ fun FieldMapScreen(
     openPuzzle: (Int) -> Unit, back: () -> Unit
 ) {
     // Store the chapter identity: saved state can be restored after progress changes.
-    var lastArrivalChapter by key("arrival-chapter-v2") { rememberSaveable { mutableIntStateOf(-1) } }
-    var pendingArrivalChapter by key("pending-arrival-chapter-v2") { rememberSaveable { mutableIntStateOf(-1) } }
+    var lastArrivalChapter by key("arrival-jade-v1") { rememberSaveable { mutableIntStateOf(-1) } }
+    var pendingArrivalChapter by key("pending-arrival-jade-v1") { rememberSaveable { mutableIntStateOf(-1) } }
     var showDetails by rememberSaveable { mutableStateOf(false) }
     val showArrivalEvent = pendingArrivalChapter==completed
     var step by rememberSaveable { mutableDoubleStateOf(10.0) }
@@ -70,8 +70,12 @@ fun FieldMapScreen(
     } }
     val nextArrived = canArrive(precise,nextDistance,accuracy,age)
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
-    LaunchedEffect(completed,nextArrived,lifecycleState) {
+    LaunchedEffect(completed,nextArrived,nextDistance,fresh,lifecycleState) {
         if(lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) {
+            if(lastArrivalChapter==completed && canRearmSpotEvent(precise,nextDistance,accuracy,age)) {
+                lastArrivalChapter=-1
+                pendingArrivalChapter=-1
+            }
             spotEventToShow(completed,spots.size,lastArrivalChapter,nextArrived)?.let { index ->
                 selected=index
                 lastArrivalChapter=index
@@ -260,7 +264,7 @@ fun FieldMapScreen(
     if(showArrivalEvent && nextSpot!=null) {
         AlertDialog(
             onDismissRequest={pendingArrivalChapter=-1},
-            title={Text("기록 발견 · ${nextSpot.title}")},
+            title={Text("이야기 시작 · ${nextSpot.title}")},
             text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 Text(if(simulation) "버튼 이동으로 스팟에 도착했습니다." else "스팟에 도착했습니다.")
                 Text(nextSpot.story)
@@ -269,7 +273,7 @@ fun FieldMapScreen(
             confirmButton={TextButton(enabled=nextArrived,onClick={
                 pendingArrivalChapter=-1
                 openPuzzle(completed)
-            }) { Text("편지 해독하기") }},
+            }) { Text("임무 시작") }},
             dismissButton={TextButton(onClick={pendingArrivalChapter=-1}) { Text("지도에 머무르기") }}
         )
     }
