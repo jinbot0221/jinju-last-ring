@@ -51,6 +51,7 @@ fun FieldMapScreen(
     LaunchedEffect(lifecycleOwner) {
         while (true) { now = SystemClock.elapsedRealtimeNanos(); delay(1000) }
     }
+    LaunchedEffect(completed) { selected=completed.coerceAtMost(spots.lastIndex) }
     val target = spots[selected]
     val age = location?.let { if(simulation) 0L else now - it.elapsedRealtimeNanos }
     val accuracy = location?.takeIf { it.hasAccuracy() }?.accuracy

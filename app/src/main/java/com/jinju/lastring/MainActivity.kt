@@ -62,12 +62,37 @@ class MainActivity: ComponentActivity() {
                                     Text("진주성의 네 장소를 따라 잊힌 편지를 완성하세요. 역사에서 영감을 받은 창작 이야기입니다.")
                                     Text("진행 ${state.completed} / ${spots.size}")
                                     LinearProgressIndicator(progress={ state.completed.toFloat()/spots.size },modifier=Modifier.fillMaxWidth())
-                                    Button(onClick={nav.navigate(if(state.completed==spots.size) "ending" else "spots")}) { Text(if(state.completed==spots.size) "결말 다시 보기" else "여정 시작 / 이어하기") }
+                                    Button(onClick={nav.navigate(if(state.completed==spots.size) "ending" else "prologue")}) { Text(if(state.completed==spots.size) "결말 다시 보기" else "여정 시작 / 이어하기") }
                                     OutlinedButton(onClick={nav.navigate("map")}) { Text("현장 지도 / 걷기 테스트") }
                                     OutlinedButton(onClick={nav.navigate("settings")}) { Text("설정 및 플레이 안내") }
                                     Text("수집한 기록",style=MaterialTheme.typography.titleLarge)
                                     spots.take(state.completed).forEach { Text("✦ ${it.relic}") }
                                     Text("현장에서는 통행과 관람 규칙을 지켜주세요. 의암과 강변의 위험 구역에는 접근하지 마세요. 안전한 관람 동선에서 플레이하세요.")
+                                }
+                            }
+                            composable("prologue") {
+                                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(20.dp)) {
+                                    Text(if(state.completed==0) "프롤로그 · 잊힌 편지" else "다시 이어지는 여정",style=MaterialTheme.typography.headlineMedium)
+                                    Text("진주성에 해가 저물 무렵, 당신은 오래된 가락지와 봉인된 편지 한 장을 발견합니다.")
+                                    Text("‘이 성에 남겨진 네 개의 기억을 찾아주세요. 마지막 기억이 깨어날 때, 가락지가 지키던 약속을 알게 될 것입니다.’")
+                                    Text("편지에는 성문, 우물, 누각, 강가의 흔적이 남아 있습니다. 각 장소에 도착해 숨겨진 문장을 해독하면 다음 기록이 열립니다.")
+                                    if(state.completed>0) {
+                                        Text("지금까지 찾은 기록 ${state.completed}개",style=MaterialTheme.typography.titleMedium)
+                                        spots.take(state.completed).forEach { Text("✦ ${it.relic}") }
+                                    }
+                                    spots.getOrNull(state.completed)?.let { spot ->
+                                        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                            Text("다음 목적지",style=MaterialTheme.typography.labelLarge)
+                                            Text(spot.title,style=MaterialTheme.typography.titleLarge)
+                                            Text("지도에서 이 스팟의 80m 안으로 이동하면 도착 이야기가 나타나고, 방탈출 퀴즈를 시작할 수 있습니다.")
+                                        } }
+                                    }
+                                    Text(if(simulation) "개발 모드: 지도 방향 버튼으로 이동할 수 있습니다." else "현장 모드에서는 정확한 위치와 GPS를 사용합니다. 안전한 관람 동선에서 이동해주세요.")
+                                    Button(modifier=Modifier.fillMaxWidth(),onClick={nav.navigate("map") {
+                                        popUpTo("prologue") { inclusive=true }
+                                        launchSingleTop=true
+                                    }}) { Text("다음") }
+                                    TextButton(onClick={nav.popBackStack()}) { Text("홈으로") }
                                 }
                             }
                             composable("spots") {
@@ -123,7 +148,16 @@ class MainActivity: ComponentActivity() {
                                 Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(14.dp)) {
                                     Text(spot.title,style=MaterialTheme.typography.headlineSmall)
                                     Text(spot.story)
-                                    if(index<state.completed) { Text("수집 완료 · ${spot.relic}") }
+                                    if(index<state.completed) {
+                                        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                            Text("기록 해독 완료",style=MaterialTheme.typography.titleLarge)
+                                            Text("✦ ${spot.relic} 획득")
+                                            spots.getOrNull(state.completed)?.let { Text("다음 목적지: ${it.title}") }
+                                        } }
+                                        if(state.completed<spots.size) Button(modifier=Modifier.fillMaxWidth(),onClick={
+                                            if(!nav.popBackStack("map",false)) nav.navigate("map") { popUpTo("home"); launchSingleTop=true }
+                                        }) { Text("다음 스팟으로") }
+                                    }
                                     else {
                                         Text(if(arrived) "도착 확인 완료" else "도착 확인 후 퍼즐을 풀 수 있습니다.")
                                         if(simulation) {
@@ -144,7 +178,9 @@ class MainActivity: ComponentActivity() {
                                         Text(feedback)
                                     }
                                     if(state.completed==spots.size) Button(onClick={nav.navigate("ending")}) { Text("마지막 편지 읽기") }
-                                    TextButton(onClick={nav.popBackStack()}) { Text("스팟 목록으로") }
+                                    TextButton(onClick={
+                                        if(!nav.popBackStack("map",false)) nav.navigate("map") { popUpTo("home"); launchSingleTop=true }
+                                    }) { Text("지도로 돌아가기") }
                                 }
                             }
                             composable("ending") {
