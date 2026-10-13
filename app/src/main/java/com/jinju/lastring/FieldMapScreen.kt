@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -27,6 +28,7 @@ import org.osmdroid.views.overlay.Polygon
 import java.io.File
 
 /** OSM tile requests stay on-device; no position upload or game backend. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FieldMapScreen(
     location: Location?, precise: Boolean, locationMessage: String,
@@ -35,8 +37,11 @@ fun FieldMapScreen(
     movePlayer: (Double, Double) -> Unit, resetPlayer: (Spot) -> Unit,
     openPuzzle: (Int) -> Unit, back: () -> Unit
 ) {
-    var arrivalEventShown by rememberSaveable(completed) { mutableStateOf(false) }
-    var showArrivalEvent by rememberSaveable(completed) { mutableStateOf(false) }
+    // Store the chapter identity: saved state can be restored after progress changes.
+    var lastArrivalChapter by key("arrival-chapter-v2") { rememberSaveable { mutableIntStateOf(-1) } }
+    var pendingArrivalChapter by key("pending-arrival-chapter-v2") { rememberSaveable { mutableIntStateOf(-1) } }
+    var showDetails by rememberSaveable { mutableStateOf(false) }
+    val showArrivalEvent = pendingArrivalChapter==completed
     var step by rememberSaveable { mutableDoubleStateOf(10.0) }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -67,10 +72,11 @@ fun FieldMapScreen(
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
     LaunchedEffect(completed,nextArrived,lifecycleState) {
         if(lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) {
-            spotEventToShow(completed,spots.size,arrivalEventShown,nextArrived)?.let { index ->
+            spotEventToShow(completed,spots.size,lastArrivalChapter,nextArrived)?.let { index ->
                 selected=index
-                arrivalEventShown=true
-                showArrivalEvent=true
+                lastArrivalChapter=index
+                pendingArrivalChapter=index
+                showDetails=false
             }
         }
     }
@@ -114,13 +120,8 @@ fun FieldMapScreen(
             map.onDetach()
         }
     }
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val panelHeight = (maxHeight * 0.45f).coerceAtMost(260.dp)
-        Column(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            Text("현장 지도",style=MaterialTheme.typography.titleLarge)
-            Text(nextSpot?.let { "다음 이벤트: ${it.title} · 80m 안에 들어가면 자동 발생" } ?: "모든 기록을 수집했습니다.",style=MaterialTheme.typography.labelMedium)
-            // Keep the map outside the scrolling panel so panning is not intercepted.
-            AndroidView(factory={map},modifier=Modifier.fillMaxWidth().weight(1f),update={ view ->
+    Box(Modifier.fillMaxSize()) {
+            AndroidView(factory={map},modifier=Modifier.fillMaxSize(),update={ view ->
                 view.overlays.clear()
                 spots.forEachIndexed { index, spot ->
                     view.overlays.add(Marker(view).apply {
@@ -168,13 +169,21 @@ fun FieldMapScreen(
                 }
                 view.invalidate()
             })
-            TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://www.openstreetmap.org/copyright")))},contentPadding=PaddingValues(0.dp)) {
-                Text("© OpenStreetMap contributors",style=MaterialTheme.typography.labelSmall)
-            }
-            Column(Modifier.fillMaxWidth().heightIn(max=panelHeight).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                if(developer) {
-                    Row { Text("지도에서 버튼으로 이동",Modifier.weight(1f)); Switch(checked=simulationEnabled,onCheckedChange=setSimulation) }
+        Card(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(12.dp).fillMaxWidth(),
+            colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface.copy(alpha=0.94f))) {
+            Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                Text(nextSpot?.let { "${completed+1} / ${spots.size} · ${it.title}" } ?: "모든 기록 수집 완료",style=MaterialTheme.typography.titleMedium)
+                Text(nextDistance?.let { "목적지까지 ${it.toInt()}m · 80m 안에서 이벤트 자동 발생" } ?: "위치 수신 대기 · 정확한 위치를 허용해주세요.")
+                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick=back) { Text("돌아가기") }
+                    TextButton(onClick={follow=true}) { Text("내 위치") }
+                    TextButton(onClick={showDetails=true}) { Text("스팟 / 테스트 설정") }
                 }
+            }
+        }
+        Column(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(8.dp).fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+            if(simulation) Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface.copy(alpha=0.94f))) {
+                Column(Modifier.padding(8.dp)) {
                 if(simulation) {
                     Text("모의 위치 · GPS/위치 권한 불필요 · 한 번에 ${step.toInt()}m 이동")
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -188,6 +197,18 @@ fun FieldMapScreen(
                         }
                     }
                 }
+                }
+            }
+            Surface(color=MaterialTheme.colorScheme.surface.copy(alpha=0.94f),shape=MaterialTheme.shapes.small) {
+                TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://www.openstreetmap.org/copyright")))},contentPadding=PaddingValues(horizontal=8.dp,vertical=0.dp)) {
+                    Text("© OpenStreetMap contributors",style=MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
+    if(showDetails) ModalBottomSheet(onDismissRequest={showDetails=false},sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true)) {
+        Column(Modifier.fillMaxWidth().heightIn(max=500.dp).verticalScroll(rememberScrollState()).padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            if(developer) Row { Text("지도 버튼 이동",Modifier.weight(1f)); Switch(checked=simulationEnabled,onCheckedChange=setSimulation) }
                 Text("${selected+1}. ${target.title}",style=MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick={selected=(selected+spots.size-1)%spots.size;follow=false;val s=spots[selected];map.controller.setCenter(GeoPoint(s.latitude,s.longitude))}) { Text("이전 스팟") }
@@ -207,7 +228,7 @@ fun FieldMapScreen(
                 }
                 if(!simulation) OutlinedButton(onClick=requestPermission) { Text("위치 권한 요청 / 갱신") }
                 if(developer) Text("개발 모드입니다. 실제 GPS 테스트는 설정에서 개발 모드를 끄세요. 버튼 이동은 실제 기기 위치를 변경하지 않습니다.")
-                Button(enabled=selected<completed || (selected==completed && (arrived || (developer && !simulation))),onClick={if(selected==completed && arrived) showArrivalEvent=true else openPuzzle(selected)}) {
+                Button(enabled=selected<completed || (selected==completed && (arrived || (developer && !simulation))),onClick={if(selected==completed && arrived) pendingArrivalChapter=completed else openPuzzle(selected)}) {
                     Text(if(selected<completed) "수집한 기록 보기" else if(arrived) "도착 이벤트 다시 보기" else "퍼즐 열기")
                 }
                 HorizontalDivider()
@@ -234,12 +255,11 @@ fun FieldMapScreen(
                 }
                 Text("지도에는 인터넷이 필요합니다. 연결이 없으면 캐시된 타일만 보일 수 있으며 GPS 도착 판정은 계속 동작합니다. 표시한 원은 직선 거리 범위이며 보행 경로가 아닙니다.")
                 TextButton(onClick=back) { Text("돌아가기") }
-            }
         }
     }
     if(showArrivalEvent && nextSpot!=null) {
         AlertDialog(
-            onDismissRequest={showArrivalEvent=false},
+            onDismissRequest={pendingArrivalChapter=-1},
             title={Text("기록 발견 · ${nextSpot.title}")},
             text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 Text(if(simulation) "버튼 이동으로 스팟에 도착했습니다." else "스팟에 도착했습니다.")
@@ -247,10 +267,10 @@ fun FieldMapScreen(
                 if(!nextArrived) Text("현재 도착 조건을 충족하지 않습니다. 지도로 돌아가 위치와 거리를 확인해주세요.")
             }},
             confirmButton={TextButton(enabled=nextArrived,onClick={
-                showArrivalEvent=false
+                pendingArrivalChapter=-1
                 openPuzzle(completed)
             }) { Text("편지 해독하기") }},
-            dismissButton={TextButton(onClick={showArrivalEvent=false}) { Text("지도에 머무르기") }}
+            dismissButton={TextButton(onClick={pendingArrivalChapter=-1}) { Text("지도에 머무르기") }}
         )
     }
 }

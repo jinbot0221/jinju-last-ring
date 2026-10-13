@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Bundle
 import android.os.SystemClock
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,6 +35,7 @@ class MainActivity: ComponentActivity() {
     private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { startLocation() }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
             MaterialTheme(colorScheme=darkColorScheme(primary=Color(0xFFE5C780), background=Color(0xFF101C1B), surface=Color(0xFF1C2C29))) {
                 val vm: GameViewModel = viewModel()
@@ -49,15 +51,12 @@ class MainActivity: ComponentActivity() {
                 val playerPrecise = simulation || precise
                 val nav = rememberNavController()
                 Surface(Modifier.fillMaxSize()) {
-                    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp)) {
-                        Text("JINJU · 1593",color=MaterialTheme.colorScheme.primary)
-                        Text("진주성: 마지막 가락지",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
-                        Spacer(Modifier.height(12.dp))
-                        if (!state.loaded) { CircularProgressIndicator(); return@Column }
-                        state.error?.let { Text(it,color=MaterialTheme.colorScheme.error) }
-                        NavHost(navController=nav,startDestination="home",modifier=Modifier.weight(1f)) {
+                    Box(Modifier.fillMaxSize()) {
+                        if (!state.loaded) { CircularProgressIndicator(); return@Box }
+                        NavHost(navController=nav,startDestination="home",modifier=Modifier.fillMaxSize()) {
                             composable("home") {
-                                Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+                                Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+                                    Text("진주성: 마지막 가락지",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
                                     Text("강물은 기억하고, 가락지는 약속한다.",style=MaterialTheme.typography.headlineMedium)
                                     Text("진주성의 네 장소를 따라 잊힌 편지를 완성하세요. 역사에서 영감을 받은 창작 이야기입니다.")
                                     Text("진행 ${state.completed} / ${spots.size}")
@@ -71,7 +70,7 @@ class MainActivity: ComponentActivity() {
                                 }
                             }
                             composable("prologue") {
-                                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(20.dp)) {
+                                Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(20.dp)) {
                                     Text(if(state.completed==0) "프롤로그 · 잊힌 편지" else "다시 이어지는 여정",style=MaterialTheme.typography.headlineMedium)
                                     Text("진주성에 해가 저물 무렵, 당신은 오래된 가락지와 봉인된 편지 한 장을 발견합니다.")
                                     Text("‘이 성에 남겨진 네 개의 기억을 찾아주세요. 마지막 기억이 깨어날 때, 가락지가 지키던 약속을 알게 될 것입니다.’")
@@ -96,7 +95,7 @@ class MainActivity: ComponentActivity() {
                                 }
                             }
                             composable("spots") {
-                                Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                                Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                                     Text(if(state.developer) "개발 모드 · 위치 없이 도착 처리 가능" else "현장 모드 · 도착 범위 80m")
                                     if(!state.developer) {
                                         Text(locationMessage)
@@ -137,15 +136,22 @@ class MainActivity: ComponentActivity() {
                                 if(index==null || index !in spots.indices || index>state.completed) { Text("아직 열리지 않은 기록입니다."); return@composable }
                                 val spot=spots[index]
                                 var answer by rememberSaveable(index) { mutableStateOf("") }
+                                var submitted by rememberSaveable(index) { mutableStateOf(false) }
                                 var feedback by rememberSaveable(index) { mutableStateOf("") }
                                 var hint by rememberSaveable(index) { mutableStateOf(false) }
                                 var simulated by rememberSaveable(index,state.developer) { mutableStateOf(false) }
                                 var now by remember { mutableLongStateOf(SystemClock.elapsedRealtimeNanos()) }
                                 LaunchedEffect(Unit) { while(true) { now=SystemClock.elapsedRealtimeNanos(); kotlinx.coroutines.delay(1000) } }
+                                LaunchedEffect(submitted,state.completed,state.error) {
+                                    if(submitted && state.completed>index) {
+                                        submitted=false
+                                        nav.navigate("chapter/$index") { popUpTo("puzzle/$index") { inclusive=true }; launchSingleTop=true }
+                                    } else if(state.error!=null) submitted=false
+                                }
                                 val arrived=if(state.developer && !simulation) simulated else playerPrecise && playerLocation?.let {
                                     canArrive(playerPrecise, distanceMeters(it.latitude,it.longitude,spot.latitude,spot.longitude), if(it.hasAccuracy()) it.accuracy else null, if(simulation) 0L else now-it.elapsedRealtimeNanos)
                                 }==true
-                                Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(14.dp)) {
+                                Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(14.dp)) {
                                     Text(spot.title,style=MaterialTheme.typography.headlineSmall)
                                     Text(spot.story)
                                     if(index<state.completed) {
@@ -172,7 +178,7 @@ class MainActivity: ComponentActivity() {
                                         }
                                         Text(spot.question)
                                         OutlinedTextField(value=answer,onValueChange={answer=it;feedback=""},label={Text("정답")},enabled=arrived, singleLine=true,modifier=Modifier.fillMaxWidth())
-                                        Button(enabled=arrived,onClick={ if(answerMatches(answer,spot.answer)) { vm.complete(index); feedback="정답입니다! 기록을 저장하고 있습니다." } else feedback="다시 생각해보세요. 힌트를 확인할 수 있습니다." }) { Text("기록 해독") }
+                                        Button(enabled=arrived && !submitted,onClick={ if(answerMatches(answer,spot.answer)) { submitted=true; vm.complete(index); feedback="정답입니다! 기록을 저장하고 있습니다." } else feedback="다시 생각해보세요. 힌트를 확인할 수 있습니다." }) { Text("기록 해독") }
                                         TextButton(onClick={hint=true}) { Text("힌트 보기") }
                                         if(hint) Text(spot.hint)
                                         Text(feedback)
@@ -183,8 +189,24 @@ class MainActivity: ComponentActivity() {
                                     }) { Text("지도로 돌아가기") }
                                 }
                             }
+                            composable("chapter/{index}") { entry ->
+                                val index=entry.arguments?.getString("index")?.toIntOrNull()
+                                if(index==null || index !in spots.indices || state.completed<=index) { Text("아직 해독하지 않은 기록입니다."); return@composable }
+                                Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(24.dp)) {
+                                    Text("기록 ${index+1} · 해독된 이야기",style=MaterialTheme.typography.headlineMedium)
+                                    Text("✦ ${spots[index].relic} 획득",color=MaterialTheme.colorScheme.primary)
+                                    Text(chapterStories[index],style=MaterialTheme.typography.bodyLarge)
+                                    spots.getOrNull(state.completed)?.let { Text("다음 목적지: ${it.title}",style=MaterialTheme.typography.titleLarge) }
+                                    Button(modifier=Modifier.fillMaxWidth(),onClick={
+                                        nav.navigate(if(state.completed==spots.size) "ending" else "map") {
+                                            popUpTo("home")
+                                            launchSingleTop=true
+                                        }
+                                    }) { Text("진행") }
+                                }
+                            }
                             composable("ending") {
-                                Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(20.dp)) {
+                                Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(20.dp)) {
                                     if(state.completed==spots.size) {
                                         Text("약속은 남는다",style=MaterialTheme.typography.headlineLarge)
                                         Text("네 조각의 기록이 하나의 가락지가 되었습니다. 잊힌 목소리를 기억하겠다는 당신의 약속으로, 진주성의 마지막 편지가 완성됩니다.")
@@ -195,7 +217,7 @@ class MainActivity: ComponentActivity() {
                             }
                             composable("settings") {
                                 var confirm by remember { mutableStateOf(false) }
-                                Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+                                Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                                     Text("플레이 설정",style=MaterialTheme.typography.headlineSmall)
                                     Row { Text("개발 모드",Modifier.weight(1f)); Switch(checked=state.developer,onCheckedChange=vm::developer) }
                                     Text("개발 모드는 기본으로 켜져 있습니다. 지도에서 방향 버튼으로 이동해 80m 안에 도착하면 퍼즐을 풀 수 있습니다. 지도에서 버튼 이동을 끄면 기존 모의 도착 버튼도 사용할 수 있습니다. 현장 모드로 전환하면 실제 위치를 확인합니다.")
@@ -205,6 +227,11 @@ class MainActivity: ComponentActivity() {
                                     TextButton(onClick={nav.popBackStack()}) { Text("돌아가기") }
                                 }
                                 if(confirm) AlertDialog(onDismissRequest={confirm=false},title={Text("기록을 지울까요?")},text={Text("수집 기록과 퍼즐 진행이 초기화됩니다.")},confirmButton={TextButton(onClick={vm.reset();confirm=false}) {Text("초기화")}},dismissButton={TextButton(onClick={confirm=false}) {Text("취소")}})
+                            }
+                        }
+                        state.error?.let { message ->
+                            Surface(Modifier.statusBarsPadding().padding(12.dp),color=MaterialTheme.colorScheme.errorContainer) {
+                                Text(message,Modifier.padding(12.dp),color=MaterialTheme.colorScheme.onErrorContainer)
                             }
                         }
                     }
